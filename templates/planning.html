@@ -1,137 +1,31 @@
 {% set active='planning' %}{% extends "base.html" %}{% block content %}
-<div class="page-title"><h1>Planning</h1><p>Vue semaine de la charge caisserie.</p></div>
+<div class="page-title"><h1>Planning</h1><p>Vue semaine ou mois de la charge caisserie.</p></div>
 <section class="panel">
-  <div class="filters">
+  <style>
+    .planning-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+    .planning-toolbar input{flex:1;min-width:260px}
+    .planning-toolbar button.active{background:#dff1ff;color:#003b63;font-weight:700}
+    .planning-month{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+    .planning-week{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+    .month-head{font-weight:700;text-align:center;color:#003b63;padding:6px 0}
+    .month-day{min-height:135px}
+    .month-empty{background:transparent;border:none;box-shadow:none}
+    @media(max-width:1100px){.planning-month{grid-template-columns:repeat(2,1fr)}.planning-week{grid-template-columns:1fr}}
+  </style>
+  <div class="planning-toolbar">
     <input id="searchPlanning" placeholder="Recherche dossier, client, chargé..." oninput="renderPlanning()">
-    <button onclick="changeWeek(-7)">Semaine précédente</button>
-    <button onclick="changeWeek(7)">Semaine suivante</button>
+    <button id="btnWeek" onclick="setPlanningMode('week')">Semaine</button>
+    <button id="btnMonth" onclick="setPlanningMode('month')">Mois</button>
+    <button onclick="changePeriod(-1)">Précédent</button>
+    <button onclick="changePeriod(1)">Suivant</button>
   </div>
-
-  <div class="planning-legend">
-    <span><i class="legend-dot status-a-creer"></i>À créer</span>
-    <span><i class="legend-dot status-en-cours"></i>En cours</span>
-    <span><i class="legend-dot status-prete"></i>Caisse prête</span>
-    <span><i class="legend-dot status-annulee"></i>Annulée</span>
+  <div class="legend" style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 12px;">
+    <span><b style="color:#2563eb">●</b> À créer</span>
+    <span><b style="color:#f97316">●</b> En cours</span>
+    <span><b style="color:#16a34a">●</b> Caisse prête</span>
+    <span><b style="color:#64748b">●</b> Annulée</span>
   </div>
-
   <div id="weekLabel" class="week-label"></div>
-  <div id="planningGrid" class="planning"></div>
+  <div id="planningGrid" class="planning planning-week"></div>
 </section>
-
-<style>
-  .planning-legend{
-    display:flex;
-    gap:14px;
-    flex-wrap:wrap;
-    align-items:center;
-    margin:12px 0 8px;
-    font-size:13px;
-    color:#334155;
-  }
-  .planning-legend span{display:flex;align-items:center;gap:6px;}
-  .legend-dot{width:12px;height:12px;border-radius:50%;display:inline-block;}
-
-  .status-a-creer{background:#2563eb!important;color:#fff!important;}
-  .status-en-cours{background:#f97316!important;color:#fff!important;}
-  .status-prete{background:#16a34a!important;color:#fff!important;}
-  .status-annulee{background:#64748b!important;color:#fff!important;}
-
-  .planning-card,
-  .planning-item,
-  .calendar-item,
-  .week-item{
-    border-radius:10px;
-    padding:10px;
-    margin-bottom:8px;
-    font-size:13px;
-    line-height:1.25;
-    box-shadow:0 2px 8px rgba(15,23,42,.08);
-  }
-</style>
-
-<script>
-let planningWeekStart = null;
-let planningCaisses = [];
-
-function mondayOf(date){
-  const d = new Date(date);
-  const day = d.getDay() || 7;
-  d.setDate(d.getDate() - day + 1);
-  d.setHours(0,0,0,0);
-  return d;
-}
-
-function isoDate(d){
-  return d.toISOString().slice(0,10);
-}
-
-function frDate(d){
-  return d.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit'});
-}
-
-function statusClass(statut){
-  const s = (statut || '').toLowerCase();
-  if(s.includes('annul')) return 'status-annulee';
-  if(s.includes('prête') || s.includes('prete') || s.includes('termin')) return 'status-prete';
-  if(s.includes('cours')) return 'status-en-cours';
-  return 'status-a-creer';
-}
-
-async function loadPlanningCaisses(){
-  const res = await fetch('/api/caisses');
-  planningCaisses = await res.json();
-  renderPlanning();
-}
-
-function changeWeek(delta){
-  if(!planningWeekStart) planningWeekStart = mondayOf(new Date());
-  planningWeekStart.setDate(planningWeekStart.getDate() + delta);
-  renderPlanning();
-}
-
-function renderPlanning(){
-  if(!planningWeekStart) planningWeekStart = mondayOf(new Date());
-
-  const grid = document.getElementById('planningGrid');
-  const label = document.getElementById('weekLabel');
-  const search = (document.getElementById('searchPlanning')?.value || '').toLowerCase().trim();
-  if(!grid || !label) return;
-
-  const weekEnd = new Date(planningWeekStart);
-  weekEnd.setDate(weekEnd.getDate() + 4);
-  label.textContent = 'Semaine du ' + frDate(planningWeekStart) + '/' + planningWeekStart.getFullYear();
-
-  const days = [];
-  const noms = ['lundi','mardi','mercredi','jeudi','vendredi'];
-  for(let i=0;i<5;i++){
-    const d = new Date(planningWeekStart);
-    d.setDate(d.getDate()+i);
-    days.push({date:d, iso:isoDate(d), nom:noms[i]});
-  }
-
-  grid.innerHTML = days.map(day => {
-    const items = planningCaisses.filter(c => {
-      const dateCaisse = c.date_prevue || c.delai_demande || c.created_at?.slice(0,10);
-      const txt = [c.numero_dossier, c.numero_colis, c.client, c.charge_projet, c.caissier, c.statut]
-        .join(' ').toLowerCase();
-      return dateCaisse === day.iso && (!search || txt.includes(search));
-    });
-
-    const htmlItems = items.length ? items.map(c => {
-      const dims = `${c.longueur || '-'}×${c.largeur || '-'}×${c.hauteur || '-'}`;
-      const caissier = c.caissier || 'non affecté';
-      const charge = c.charge_projet || '-';
-      return `<div class="planning-card ${statusClass(c.statut)}" title="${c.statut || 'A créer'}">
-        <strong>${c.numero_dossier || '-'} - colis ${c.numero_colis || '-'}</strong><br>
-        ${dims} / ${caissier}<br>
-        ${charge}
-      </div>`;
-    }).join('') : '<div class="free">Libre</div>';
-
-    return `<div class="day"><h3>${day.nom} ${frDate(day.date)}</h3>${htmlItems}</div>`;
-  }).join('');
-}
-
-document.addEventListener('DOMContentLoaded', loadPlanningCaisses);
-</script>
 {% endblock %}
