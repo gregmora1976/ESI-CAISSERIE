@@ -17,11 +17,158 @@ async function saveAtelier(){await api('/api/caisses/'+SELECTED,{method:'PUT',he
 async function setStatus(st){await api('/api/caisses/'+SELECTED+'/status',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({statut:st})});await loadAtelier();await selectAtelier(SELECTED);}
 async function initSuperviseur(){const s=await api('/api/stats');document.getElementById('statsCards').innerHTML=[['Total',s.total],['À créer',s.a_creer],['En cours',s.en_cours],['Prêtes',s.pretes],['Retards',s.retards]].map(x=>`<div class="stat">${x[0]}<strong>${x[1]}</strong></div>`).join('');document.getElementById('materialStats').innerHTML=`<table class="table"><tr><th>Matière</th><th>Cumul caisses prêtes</th></tr><tr><td>CP</td><td>${s.matieres.cp_m2} m²</td></tr><tr><td>Barres</td><td>${s.matieres.barres_ml} ml</td></tr><tr><td>Chevrons</td><td>${s.matieres.chevrons_ml} ml</td></tr><tr><td>Autres</td><td>${s.matieres.autres}</td></tr></table>`;document.getElementById('typeStats').innerHTML=`<table class="table"><tr><th>Type</th><th>Nombre</th></tr>${Object.entries(s.par_type).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;}
 async function loadDemoData(){await api('/api/demo',{method:'POST'});location.reload();}
-function startOfWeek(d){const x=new Date(d);const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);x.setHours(0,0,0,0);return x;}function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}function iso(d){return d.toISOString().slice(0,10)}
-async function initPlanning(){await loadCaisses();renderPlanning();}
-function changeWeek(n){WEEK_START=addDays(WEEK_START,n);renderPlanning();}
-function renderPlanning(){const grid=document.getElementById('planningGrid');if(!grid)return;const q=(document.getElementById('searchPlanning')?.value||'').toLowerCase();document.getElementById('weekLabel').textContent=`Semaine du ${WEEK_START.toLocaleDateString('fr-FR')}`;grid.innerHTML=[0,1,2,3,4].map(i=>{const d=addDays(WEEK_START,i);const dayItems=CAISSES.filter(c=>(c.date_prevue||c.delai_demande)==iso(d)).filter(c=>JSON.stringify(c).toLowerCase().includes(q));return `<div class="day"><h3>${d.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'2-digit'})}</h3>${dayItems.map(c=>`<div class="event ${(c.atelier||'Secobois').toLowerCase()}"><b>${c.numero_dossier||c.id}</b> - colis ${c.numero_colis||'-'}<br>${c.longueur||'-'}×${c.largeur||'-'}×${c.hauteur||'-'} / ${c.caissier||'non affecté'}<br>${c.charge_projet||'-'}</div>`).join('')||'<div class="empty">Libre</div>'}</div>`}).join('');}
+
+let PLANNING_MODE = 'week';
+let CURRENT_MONTH = new Date(WEEK_START);
+
+function startOfWeek(d){
+  const x = new Date(d);
+  const day = (x.getDay() + 6) % 7;
+  x.setDate(x.getDate() - day);
+  x.setHours(0,0,0,0);
+  return x;
+}
+
+function addDays(d,n){
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function iso(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+function planningDate(c){
+  return c.date_prevue || c.delai_demande || '';
+}
+
+function planningStatusClass(statut){
+  if(statut === 'A créer') return 'planning-a-creer';
+  if(statut === 'En cours') return 'planning-en-cours';
+  if(statut === 'Caisse prête') return 'planning-prete';
+  if(statut === 'Annulée') return 'planning-annulee';
+  return 'planning-default';
+}
+
+function planningStatusColor(statut){
+  if(statut === 'A créer') return '#2563eb';
+  if(statut === 'En cours') return '#f97316';
+  if(statut === 'Caisse prête') return '#16a34a';
+  if(statut === 'Annulée') return '#64748b';
+  return '#0284c7';
+}
+
+function planningEvent(c){
+  return `<div class="event ${planningStatusClass(c.statut)}" style="background:${planningStatusColor(c.statut)};color:white;">
+    <b>${c.numero_dossier || c.id}</b> - colis ${c.numero_colis || '-'}<br>
+    ${c.longueur || '-'}×${c.largeur || '-'}×${c.hauteur || '-'} / ${c.caissier || 'non affecté'}<br>
+    ${c.charge_projet || '-'}
+  </div>`;
+}
+
+async function initPlanning(){
+  await loadCaisses();
+  renderPlanning();
+}
+
+function setPlanningMode(mode){
+  PLANNING_MODE = mode;
+  renderPlanning();
+}
+
+function changePeriod(direction){
+  if(PLANNING_MODE === 'month'){
+    CURRENT_MONTH.setMonth(CURRENT_MONTH.getMonth() + direction);
+  }else{
+    WEEK_START = addDays(WEEK_START, direction * 7);
+    CURRENT_MONTH = new Date(WEEK_START);
+  }
+  renderPlanning();
+}
+
+function changeWeek(n){
+  WEEK_START = addDays(WEEK_START, n);
+  CURRENT_MONTH = new Date(WEEK_START);
+  renderPlanning();
+}
+
+function filteredItemsForDate(dateIso, q){
+  return CAISSES
+    .filter(c => planningDate(c) === dateIso)
+    .filter(c => JSON.stringify(c).toLowerCase().includes(q));
+}
+
+function renderPlanning(){
+  const grid = document.getElementById('planningGrid');
+  if(!grid) return;
+
+  const q = (document.getElementById('searchPlanning')?.value || '').toLowerCase();
+
+  const btnWeek = document.getElementById('btnWeek');
+  const btnMonth = document.getElementById('btnMonth');
+  if(btnWeek) btnWeek.classList.toggle('active', PLANNING_MODE === 'week');
+  if(btnMonth) btnMonth.classList.toggle('active', PLANNING_MODE === 'month');
+
+  if(PLANNING_MODE === 'month'){
+    renderPlanningMonth(grid, q);
+  }else{
+    renderPlanningWeek(grid, q);
+  }
+}
+
+function renderPlanningWeek(grid, q){
+  const label = document.getElementById('weekLabel');
+  if(label) label.textContent = `Semaine du ${WEEK_START.toLocaleDateString('fr-FR')}`;
+
+  grid.className = 'planning planning-week';
+
+  grid.innerHTML = [0,1,2,3,4].map(i=>{
+    const d = addDays(WEEK_START, i);
+    const dayItems = filteredItemsForDate(iso(d), q);
+    return `<div class="day">
+      <h3>${d.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'2-digit'})}</h3>
+      ${dayItems.map(planningEvent).join('') || '<div class="empty">Libre</div>'}
+    </div>`;
+  }).join('');
+}
+
+function renderPlanningMonth(grid, q){
+  const year = CURRENT_MONTH.getFullYear();
+  const month = CURRENT_MONTH.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const start = startOfWeek(firstDay);
+  const end = addDays(startOfWeek(lastDay), 6);
+
+  const label = document.getElementById('weekLabel');
+  if(label) label.textContent = CURRENT_MONTH.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+
+  grid.className = 'planning planning-month';
+
+  const heads = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
+    .map(h => `<div class="month-head">${h}</div>`)
+    .join('');
+
+  const days = [];
+  for(let d = new Date(start); d <= end; d = addDays(d, 1)){
+    days.push(new Date(d));
+  }
+
+  const cells = days.map(d=>{
+    const isCurrentMonth = d.getMonth() === month;
+    const dayItems = filteredItemsForDate(iso(d), q);
+    return `<div class="day month-day" style="${isCurrentMonth ? '' : 'opacity:.45;'}">
+      <h3>${d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})}</h3>
+      ${dayItems.map(planningEvent).join('') || '<div class="empty">Libre</div>'}
+    </div>`;
+  }).join('');
+
+  grid.innerHTML = heads + cells;
+}
+
 document.addEventListener('DOMContentLoaded',()=>{const p=document.body.dataset.page;if(p==='emballage')initEmballage();if(p==='devis')initDevis();if(p==='caisserie')loadAtelier('');if(p==='superviseur')initSuperviseur();if(p==='planning')initPlanning();});
 
-
-/* Planning semaine/mois patch à intégrer - généré automatiquement */
