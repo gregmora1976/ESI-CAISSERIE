@@ -1,0 +1,13 @@
+{% set active='accueil' %}{% extends "base.html" %}{% block content %}
+<section class="hero">
+  <h1>Gestion des demandes de fabrication de caisses</h1>
+  <p>Une structure proche d’ESI Tickets, avec des pages séparées pour Emballage, Devis, Caisserie, Planning et Superviseur.</p>
+</section>
+<div class="tiles">
+  <a class="tile blue" href="/emballage"><h2>Emballage</h2><p>Créer et suivre les demandes.</p></a>
+  <a class="tile gold" href="/devis"><h2>Devis</h2><p>Calculer prix achat et prix cession.</p></a>
+  <a class="tile yellow" href="/caisserie"><h2>Caisserie</h2><p>Traiter les fabrications atelier.</p></a>
+  <a class="tile green" href="/planning"><h2>Planning</h2><p>Visualiser la charge semaine.</p></a>
+  <a class="tile purple" href="/superviseur"><h2>Superviseur</h2><p>Statistiques et matières cumulées.</p></a>
+</div>
+{% endblock %}

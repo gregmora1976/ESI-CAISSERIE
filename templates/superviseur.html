@@ -1,0 +1,8 @@
+{% set active='superviseur' %}{% extends "base.html" %}{% block content %}
+<div class="page-title"><h1>Superviseur</h1><p>Statistiques, retards et consommation matière cumulée.</p></div>
+<section class="stats" id="statsCards"></section>
+<div class="layout two">
+  <section class="panel"><h2>Consommation matières cumulée</h2><div id="materialStats"></div></section>
+  <section class="panel"><h2>Répartition par type</h2><div id="typeStats"></div><a class="button-link" href="/api/export/csv">Exporter CSV</a><button onclick="loadDemoData()">Charger données démo</button></section>
+</div>
+{% endblock %}

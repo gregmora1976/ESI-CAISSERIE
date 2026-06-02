@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESI Caisserie</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-page="{{ active|default('') }}">
+<header class="topbar">
+  <div class="brand"><div class="logo">ESI</div><div><strong>ESI Caisserie</strong><span>Fabrication • Devis • Planning</span></div></div>
+  <nav>
+    <a class="{{ 'active' if active=='accueil' else '' }}" href="/">Accueil</a>
+    <a class="{{ 'active' if active=='emballage' else '' }}" href="/emballage">Emballage</a>
+    <a class="{{ 'active' if active=='devis' else '' }}" href="/devis">Devis</a>
+    <a class="{{ 'active' if active=='caisserie' else '' }}" href="/caisserie">Caisserie</a>
+    <a class="{{ 'active' if active=='planning' else '' }}" href="/planning">Planning</a>
+    <a class="{{ 'active' if active=='superviseur' else '' }}" href="/superviseur">Superviseur</a>
+  </nav>
+</header>
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

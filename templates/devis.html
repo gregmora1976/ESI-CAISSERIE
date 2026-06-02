@@ -1,0 +1,28 @@
+{% set active='devis' %}{% extends "base.html" %}{% block content %}
+<div class="page-title"><h1>Demande devis</h1><p>Calcul estimatif à partir du débit matière et des paramètres tarifaires.</p></div>
+<div class="layout two">
+  <section class="panel">
+    <h2>Informations caisse</h2>
+    <form id="devisForm" class="form-grid">
+      <label>N° dossier<input name="numero_dossier"></label>
+      <label>Colis n°<input name="numero_colis"></label>
+      <label>Client<input name="client"></label>
+      <label>Chargé de projet<input name="charge_projet"></label>
+      <label>Type caisse<select name="type_caisse">{% for t in types %}<option>{{t}}</option>{% endfor %}</select></label>
+      <label>Longueur int. cm<input name="longueur" type="number" step="0.1"></label>
+      <label>Largeur int. cm<input name="largeur" type="number" step="0.1"></label>
+      <label>Hauteur int. cm<input name="hauteur" type="number" step="0.1"></label>
+      <label class="full">Observations<textarea name="observations"></textarea></label>
+      <button class="primary" type="button" onclick="calculateQuote()">Calculer</button>
+      <button class="success" type="button" onclick="createFromQuote()">Créer la demande</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Résultat</h2>
+    <div id="quoteResult" class="empty">Renseigner les dimensions puis cliquer sur Calculer.</div>
+    <h3>Paramètres</h3>
+    <div id="priceForm" class="price-grid"></div>
+    <button class="secondary" onclick="savePrices()">Enregistrer les tarifs</button>
+  </section>
+</div>
+{% endblock %}

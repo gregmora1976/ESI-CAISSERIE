@@ -1,0 +1,14 @@
+{% set active='caisserie' %}{% extends "base.html" %}{% block content %}
+<div class="page-title"><h1>Caisserie</h1><p>Traitement atelier, débit et suivi de fabrication.</p></div>
+<div class="layout two">
+  <section class="panel">
+    <h2>Liste atelier</h2>
+    <div class="filters"><button onclick="loadAtelier('')">Toutes</button><button onclick="loadAtelier('A créer')">À créer</button><button onclick="loadAtelier('En cours')">En cours</button><button onclick="loadAtelier('Caisse prête')">Prêtes</button></div>
+    <div id="atelierList"></div>
+  </section>
+  <section class="panel">
+    <h2>Détail</h2>
+    <div id="atelierDetail" class="empty">Sélectionner une caisse.</div>
+  </section>
+</div>
+{% endblock %}

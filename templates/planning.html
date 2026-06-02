@@ -1,0 +1,8 @@
+{% set active='planning' %}{% extends "base.html" %}{% block content %}
+<div class="page-title"><h1>Planning</h1><p>Vue semaine de la charge caisserie.</p></div>
+<section class="panel">
+  <div class="filters"><input id="searchPlanning" placeholder="Recherche dossier, client, chargé..." oninput="renderPlanning()"><button onclick="changeWeek(-7)">Semaine précédente</button><button onclick="changeWeek(7)">Semaine suivante</button></div>
+  <div id="weekLabel" class="week-label"></div>
+  <div id="planningGrid" class="planning"></div>
+</section>
+{% endblock %}
