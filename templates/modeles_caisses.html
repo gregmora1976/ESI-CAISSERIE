@@ -5,6 +5,8 @@
   <div class="filters">
     <input id="modelName" placeholder="Nom du type de caisse, ex : PLEINE CP TYPE 17">
     <button onclick="newModel()">Nouveau</button>
+    <button onclick="duplicateModel()">Dupliquer</button>
+    <button onclick="deleteModel()" class="danger">Supprimer</button>
     <button onclick="saveModel()" class="primary">Enregistrer le modèle</button>
   </div>
 
@@ -81,6 +83,27 @@ function newModel(){
   LINES = [];
   renderEditor();
   document.getElementById('modelName').focus();
+}
+
+function duplicateModel(){
+  const currentName = document.getElementById('modelName').value.trim();
+
+  if(!currentName){
+    alert('Sélectionne d’abord un modèle à dupliquer.');
+    return;
+  }
+
+  CURRENT_ID = null;
+
+  document.getElementById('modelName').value = currentName + ' - COPIE';
+
+  VARIABLES = JSON.parse(JSON.stringify(VARIABLES || {}));
+  LINES = JSON.parse(JSON.stringify(LINES || []));
+
+  renderEditor();
+  document.getElementById('modelName').focus();
+
+  alert('Modèle dupliqué. Change le nom et les valeurs, puis clique sur Enregistrer le modèle.');
 }
 
 async function loadModels(){
@@ -245,6 +268,41 @@ function addLine(){
 function removeLine(i){
   LINES.splice(i,1);
   renderLines();
+}
+
+async function deleteModel(){
+
+  if(!CURRENT_ID){
+    alert('Sélectionne un modèle à supprimer.');
+    return;
+  }
+
+  const nom = document.getElementById('modelName').value || CURRENT_ID;
+
+  if(!confirm(`Supprimer le modèle "${nom}" ?`)){
+    return;
+  }
+
+  const res = await fetch('/api/types-caisses/' + CURRENT_ID,{
+    method:'DELETE'
+  });
+
+  if(!res.ok){
+    alert('Erreur lors de la suppression');
+    return;
+  }
+
+  alert('Modèle supprimé');
+
+  CURRENT_ID = null;
+  document.getElementById('modelName').value = '';
+
+  VARIABLES = {};
+  LINES = [];
+
+  renderEditor();
+
+  await loadModels();
 }
 
 async function saveModel(){
