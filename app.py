@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify, request, send_file
 from pathlib import Path
 from datetime import datetime, date
-import json, io, csv, os, urllib.request, urllib.parse, urllib.error
+import json, io, csv, os, urllib.request, urllib.parse, urllib.error, re, ast, operator
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -11,7 +11,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or ""
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
 STATUTS = ["A créer", "En cours", "Caisse prête", "Annulée"]
-TYPES_CAISSE = ["PLEINE CP TYPE 15", "PLEINE CP TYPE 16", "PLEINE BOIS TYPE 15", "PLEINE BOIS TYPE 16"]
+DEFAULT_TYPES_CAISSE = ["PLEINE CP TYPE 15", "PLEINE CP TYPE 16", "PLEINE BOIS TYPE 15", "PLEINE BOIS TYPE 16"]
 DEFAULT_PRICES = {
     "cp_m2": 45.0,
     "barres_ml": 4.0,
@@ -99,7 +99,6 @@ def supabase_rest_request(method, table, query="", payload=None, prefer=None):
 
 
 def clean_caisse_row(caisse):
-    """Garde uniquement les colonnes connues de la table Supabase."""
     row = {}
     for key in CAISSE_FIELDS:
         if key in caisse:
@@ -108,7 +107,6 @@ def clean_caisse_row(caisse):
 
 
 def normalize_caisse(row):
-    """Retour compatible avec le frontend existant."""
     c = {k: (row.get(k) if row.get(k) is not None else "") for k in CAISSE_FIELDS}
     c.setdefault("statut", "A créer")
     c.setdefault("atelier", "Secobois")
@@ -116,21 +114,13 @@ def normalize_caisse(row):
 
 
 def list_caisses():
-    rows = supabase_rest_request(
-        "GET",
-        "caisses",
-        "select=*&order=created_at.desc"
-    ) or []
+    rows = supabase_rest_request("GET", "caisses", "select=*&order=created_at.desc") or []
     return [normalize_caisse(r) for r in rows]
 
 
 def get_prices():
     try:
-        rows = supabase_rest_request(
-            "GET",
-            "caisserie_settings",
-            "select=value&key=eq.prices&limit=1"
-        ) or []
+        rows = supabase_rest_request("GET", "caisserie_settings", "select=value&key=eq.prices&limit=1") or []
         if rows:
             value = rows[0].get("value") or {}
             prices = DEFAULT_PRICES.copy()
@@ -145,9 +135,7 @@ def save_prices(prices):
     current = DEFAULT_PRICES.copy()
     current.update({k: num(v) for k, v in prices.items()})
     supabase_rest_request(
-        "POST",
-        "caisserie_settings",
-        "on_conflict=key",
+        "POST", "caisserie_settings", "on_conflict=key",
         [{"key": "prices", "value": current}],
         prefer="resolution=merge-duplicates,return=minimal"
     )
@@ -156,8 +144,7 @@ def save_prices(prices):
 
 def next_id(prefix="CAI"):
     rows = supabase_rest_request(
-        "GET",
-        "caisses",
+        "GET", "caisses",
         f"select=id&id=like.{urllib.parse.quote(prefix + '-*', safe='*-')}&order=id.desc&limit=5000"
     ) or []
     nums = []
@@ -171,11 +158,7 @@ def next_id(prefix="CAI"):
 
 def find_caisse(caisse_id):
     safe_id = urllib.parse.quote(caisse_id, safe="")
-    rows = supabase_rest_request(
-        "GET",
-        "caisses",
-        f"select=*&id=eq.{safe_id}&limit=1"
-    ) or []
+    rows = supabase_rest_request("GET", "caisses", f"select=*&id=eq.{safe_id}&limit=1") or []
     if not rows:
         return None
     return normalize_caisse(rows[0])
@@ -184,10 +167,7 @@ def find_caisse(caisse_id):
 def insert_caisse(caisse):
     row = clean_caisse_row(caisse)
     result = supabase_rest_request(
-        "POST",
-        "caisses",
-        "on_conflict=id",
-        [row],
+        "POST", "caisses", "on_conflict=id", [row],
         prefer="resolution=merge-duplicates,return=representation"
     ) or []
     return normalize_caisse(result[0]) if result else caisse
@@ -197,27 +177,146 @@ def update_caisse(caisse_id, updates):
     safe_id = urllib.parse.quote(caisse_id, safe="")
     updates = {k: _as_text(v) for k, v in updates.items() if k in CAISSE_FIELDS and k not in ["id", "created_at"]}
     updates["updated_at"] = now_iso()
-    result = supabase_rest_request(
-        "PATCH",
-        "caisses",
-        f"id=eq.{safe_id}",
-        updates,
-        prefer="return=representation"
-    ) or []
+    result = supabase_rest_request("PATCH", "caisses", f"id=eq.{safe_id}", updates, prefer="return=representation") or []
     return normalize_caisse(result[0]) if result else find_caisse(caisse_id)
 
 
-def replace_demo_data(caisses):
-    """Remplace les données uniquement pour le bouton de démo."""
-    supabase_rest_request("DELETE", "caisses", "id=not.is.null", prefer="return=minimal")
-    if caisses:
-        supabase_rest_request("POST", "caisses", "", [clean_caisse_row(c) for c in caisses], prefer="return=minimal")
+# ============================================================
+# MODELES DE CAISSES PARAMETRABLES
+# ============================================================
+
+def slugify(value):
+    value = (value or "").strip().upper()
+    value = re.sub(r"[^A-Z0-9]+", "_", value)
+    return value.strip("_") or f"TYPE_{int(datetime.now().timestamp())}"
+
+
+def safe_eval_formula(expr, variables):
+    """Évalue une formule simple : L, W, H, B4, C4... avec + - * / parenthèses."""
+    expr = str(expr or "0").strip().replace(",", ".")
+    if not expr:
+        return 0.0
+
+    allowed_names = {k: num(v) for k, v in variables.items()}
+    allowed_ops = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.USub: operator.neg,
+        ast.UAdd: operator.pos,
+    }
+
+    def _eval(node):
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.Num):
+            return float(node.n)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return float(node.value)
+        if isinstance(node, ast.Name):
+            if node.id not in allowed_names:
+                raise ValueError(f"Variable inconnue : {node.id}")
+            return allowed_names[node.id]
+        if isinstance(node, ast.BinOp):
+            op = type(node.op)
+            if op not in allowed_ops:
+                raise ValueError("Opérateur non autorisé")
+            return allowed_ops[op](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp):
+            op = type(node.op)
+            if op not in allowed_ops:
+                raise ValueError("Opérateur non autorisé")
+            return allowed_ops[op](_eval(node.operand))
+        raise ValueError("Formule non autorisée")
+
+    tree = ast.parse(expr, mode="eval")
+    return float(_eval(tree))
+
+
+def get_type_names():
+    try:
+        rows = supabase_rest_request("GET", "caisse_types", "select=nom&actif=eq.true&order=nom.asc") or []
+        names = [r.get("nom") for r in rows if r.get("nom")]
+        return names or DEFAULT_TYPES_CAISSE
+    except Exception as e:
+        print("[MODELES] Liste types impossible :", e)
+        return DEFAULT_TYPES_CAISSE
+
+
+def get_caisse_type_by_name(type_name):
+    safe_name = urllib.parse.quote(type_name or "", safe="")
+    rows = supabase_rest_request("GET", "caisse_types", f"select=*&nom=eq.{safe_name}&limit=1") or []
+    return rows[0] if rows else None
+
+
+def get_caisse_type(type_id):
+    safe_id = urllib.parse.quote(type_id or "", safe="")
+    rows = supabase_rest_request("GET", "caisse_types", f"select=*&id=eq.{safe_id}&limit=1") or []
+    return rows[0] if rows else None
+
+
+def get_type_lines(type_id):
+    safe_id = urllib.parse.quote(type_id or "", safe="")
+    return supabase_rest_request("GET", "caisse_type_lignes", f"select=*&type_id=eq.{safe_id}&order=ordre.asc") or []
+
+
+def compute_debit_from_model(caisse, model, lines):
+    variables = model.get("variables") or {}
+    variables.update({
+        "L": num(caisse.get("longueur")),
+        "W": num(caisse.get("largeur")),
+        "H": num(caisse.get("hauteur")),
+    })
+
+    out_lines = []
+    max_l, max_w, max_h = variables["L"], variables["W"], variables["H"]
+
+    for line in lines:
+        qte = safe_eval_formula(line.get("formule_quantite") or line.get("quantite") or "1", variables)
+        longueur = safe_eval_formula(line.get("formule_longueur") or "0", variables)
+        largeur = safe_eval_formula(line.get("formule_largeur") or "0", variables)
+        epaisseur = safe_eval_formula(line.get("formule_epaisseur") or "0", variables)
+
+        out_lines.append({
+            "famille": line.get("famille") or "",
+            "piece": line.get("piece") or "",
+            "quantite": r1(qte),
+            "longueur": r1(longueur),
+            "largeur": r1(largeur),
+            "epaisseur": r1(epaisseur),
+        })
+
+        # Estimation des dimensions extérieures : on prend les plus grandes pièces calculées.
+        max_l = max(max_l, longueur)
+        max_w = max(max_w, largeur)
+
+    # Si des formules extérieures sont définies dans les variables, elles sont prioritaires.
+    try:
+        ext_l = safe_eval_formula(variables.get("EXT_L", ""), variables) if variables.get("EXT_L") else max_l
+        ext_w = safe_eval_formula(variables.get("EXT_W", ""), variables) if variables.get("EXT_W") else max_w
+        ext_h = safe_eval_formula(variables.get("EXT_H", ""), variables) if variables.get("EXT_H") else max_h
+    except Exception:
+        ext_l, ext_w, ext_h = max_l, max_w, max_h
+
+    return {"ok": True, "dims_ext": {"longueur": r1(ext_l), "largeur": r1(ext_w), "hauteur": r1(ext_h)}, "lignes": out_lines}
 
 
 def compute_debit(caisse):
-    """Débit issu de la maquette : modèle PLEINE CP TYPE 16 / alias PLEIN CP TYPE 16."""
-    type_caisse = (caisse.get("type_caisse") or caisse.get("type_emballage") or "").upper()
-    if type_caisse not in ["PLEINE CP TYPE 16", "PLEIN CP TYPE 16"]:
+    """Débit paramétrable depuis Supabase. Fallback sur le type 16 historique."""
+    type_caisse = (caisse.get("type_caisse") or caisse.get("type_emballage") or "").strip()
+    try:
+        model = get_caisse_type_by_name(type_caisse)
+        if model:
+            lines = get_type_lines(model.get("id"))
+            if lines:
+                return compute_debit_from_model(caisse, model, lines)
+    except Exception as e:
+        print("[DEBIT MODELE] Erreur, fallback historique :", e)
+
+    # Fallback historique PLEINE CP TYPE 16
+    type_upper = type_caisse.upper()
+    if type_upper not in ["PLEINE CP TYPE 16", "PLEIN CP TYPE 16"]:
         return {"ok": False, "message": "Débit automatique non paramétré pour ce type de caisse.", "dims_ext": {}, "lignes": []}
 
     L = num(caisse.get("longueur"))
@@ -225,11 +324,7 @@ def compute_debit(caisse):
     H = num(caisse.get("hauteur"))
     B4, C4, D4, E4, C5, E5 = 10, 1.5, 4, 1.5, 1, 2.7
 
-    dims_ext = {
-        "longueur": r1(L + E4 + E4 + E5 + E5),
-        "largeur": r1(W + E4 + E4 + E5 + E5),
-        "hauteur": r1(H + E4 + E4 + E5 + B4),
-    }
+    dims_ext = {"longueur": r1(L + E4 + E4 + E5 + E5), "largeur": r1(W + E4 + E4 + E5 + E5), "hauteur": r1(H + E4 + E4 + E5 + B4)}
     cover_l = r1(L + E5 + E5 + C5 + C5)
     cover_w = r1(W + E5 + E5 + C5 + C5)
     cote_h = r1(H + C4 + D4)
@@ -281,20 +376,7 @@ def quote(caisse, prices=None):
     revient = sous_total + frais
     marge = revient * num(prices.get("marge")) / 100
     cession = revient + marge
-    return {
-        "matieres": mat,
-        "prix_achat": round(revient, 2),
-        "prix_cession": round(cession, 2),
-        "detail": {
-            "cp": round(cp, 2),
-            "barres": round(barres, 2),
-            "chevrons": round(chevrons, 2),
-            "consommables": round(consommables, 2),
-            "main_oeuvre": round(mo, 2),
-            "frais": round(frais, 2),
-            "marge": round(marge, 2),
-        },
-    }
+    return {"matieres": mat, "prix_achat": round(revient, 2), "prix_cession": round(cession, 2), "detail": {"cp": round(cp, 2), "barres": round(barres, 2), "chevrons": round(chevrons, 2), "consommables": round(consommables, 2), "main_oeuvre": round(mo, 2), "frais": round(frais, 2), "marge": round(marge, 2)}}
 
 
 @app.route("/")
@@ -304,12 +386,12 @@ def accueil():
 
 @app.route("/emballage")
 def emballage():
-    return render_template("emballage.html", types=TYPES_CAISSE)
+    return render_template("emballage.html", types=get_type_names())
 
 
 @app.route("/devis")
 def devis():
-    return render_template("devis.html", types=TYPES_CAISSE)
+    return render_template("devis.html", types=get_type_names())
 
 
 @app.route("/caisserie")
@@ -325,6 +407,11 @@ def superviseur():
 @app.route("/planning")
 def planning():
     return render_template("planning.html")
+
+
+@app.route("/modeles-caisses")
+def modeles_caisses():
+    return render_template("modeles_caisses.html")
 
 
 @app.route("/api/caisses")
@@ -414,19 +501,120 @@ def api_prices():
     return jsonify(get_prices())
 
 
+@app.route("/api/types-caisses", methods=["GET"])
+def api_types_caisses():
+    rows = supabase_rest_request("GET", "caisse_types", "select=*&order=nom.asc") or []
+    return jsonify(rows)
+
+
+@app.route("/api/types-caisses", methods=["POST"])
+def api_create_type_caisse():
+    payload = request.get_json(silent=True) or {}
+    nom = payload.get("nom", "").strip()
+    if not nom:
+        return jsonify({"error": "Nom du type obligatoire"}), 400
+
+    type_id = slugify(nom)
+    variables = payload.get("variables") or {}
+    lines = payload.get("lignes") or []
+
+    model = {
+        "id": type_id,
+        "nom": nom,
+        "variables": variables,
+        "actif": True,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    supabase_rest_request("POST", "caisse_types", "on_conflict=id", [model], prefer="resolution=merge-duplicates,return=minimal")
+
+    safe_id = urllib.parse.quote(type_id, safe="")
+    supabase_rest_request("DELETE", "caisse_type_lignes", f"type_id=eq.{safe_id}", prefer="return=minimal")
+
+    line_rows = []
+    for i, line in enumerate(lines, 1):
+        line_rows.append({
+            "type_id": type_id,
+            "ordre": i,
+            "famille": line.get("famille", ""),
+            "piece": line.get("piece", ""),
+            "formule_quantite": str(line.get("formule_quantite", line.get("quantite", "1"))),
+            "formule_longueur": str(line.get("formule_longueur", "")),
+            "formule_largeur": str(line.get("formule_largeur", "")),
+            "formule_epaisseur": str(line.get("formule_epaisseur", "")),
+        })
+    if line_rows:
+        supabase_rest_request("POST", "caisse_type_lignes", "", line_rows, prefer="return=minimal")
+
+    return jsonify({"ok": True, "id": type_id})
+
+
+@app.route("/api/types-caisses/<type_id>", methods=["GET"])
+def api_get_type_caisse(type_id):
+    model = get_caisse_type(type_id)
+    if not model:
+        return jsonify({"error": "Type introuvable"}), 404
+    model["lignes"] = get_type_lines(type_id)
+    return jsonify(model)
+
+
+@app.route("/api/types-caisses/<type_id>", methods=["PUT"])
+def api_update_type_caisse(type_id):
+    payload = request.get_json(silent=True) or {}
+    model = get_caisse_type(type_id)
+    if not model:
+        return jsonify({"error": "Type introuvable"}), 404
+
+    updates = {
+        "nom": payload.get("nom", model.get("nom")),
+        "variables": payload.get("variables", model.get("variables") or {}),
+        "actif": bool(payload.get("actif", model.get("actif", True))),
+        "updated_at": now_iso(),
+    }
+    safe_id = urllib.parse.quote(type_id, safe="")
+    supabase_rest_request("PATCH", "caisse_types", f"id=eq.{safe_id}", updates, prefer="return=minimal")
+
+    if "lignes" in payload:
+        supabase_rest_request("DELETE", "caisse_type_lignes", f"type_id=eq.{safe_id}", prefer="return=minimal")
+        rows = []
+        for i, line in enumerate(payload.get("lignes") or [], 1):
+            rows.append({
+                "type_id": type_id,
+                "ordre": i,
+                "famille": line.get("famille", ""),
+                "piece": line.get("piece", ""),
+                "formule_quantite": str(line.get("formule_quantite", line.get("quantite", "1"))),
+                "formule_longueur": str(line.get("formule_longueur", "")),
+                "formule_largeur": str(line.get("formule_largeur", "")),
+                "formule_epaisseur": str(line.get("formule_epaisseur", "")),
+            })
+        if rows:
+            supabase_rest_request("POST", "caisse_type_lignes", "", rows, prefer="return=minimal")
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/types-caisses/<type_id>", methods=["DELETE"])
+def api_delete_type_caisse(type_id):
+    safe_id = urllib.parse.quote(type_id, safe="")
+    supabase_rest_request("PATCH", "caisse_types", f"id=eq.{safe_id}", {"actif": False, "updated_at": now_iso()}, prefer="return=minimal")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/types-caisses/<type_id>/test-debit", methods=["POST"])
+def api_test_type_debit(type_id):
+    model = get_caisse_type(type_id)
+    if not model:
+        return jsonify({"error": "Type introuvable"}), 404
+    caisse = request.get_json(silent=True) or {}
+    caisse["type_caisse"] = model.get("nom")
+    return jsonify(compute_debit_from_model(caisse, model, get_type_lines(type_id)))
+
+
 @app.route("/api/stats")
 def api_stats():
     caisses = list_caisses()
-    stats = {
-        "total": len(caisses),
-        "a_creer": 0,
-        "en_cours": 0,
-        "pretes": 0,
-        "annulees": 0,
-        "matieres": {"cp_m2": 0, "barres_ml": 0, "chevrons_ml": 0, "autres": 0},
-        "par_type": {},
-        "retards": 0,
-    }
+    stats = {"total": len(caisses), "a_creer": 0, "en_cours": 0, "pretes": 0, "annulees": 0, "matieres": {"cp_m2": 0, "barres_ml": 0, "chevrons_ml": 0, "autres": 0}, "par_type": {}, "retards": 0}
     today = today_iso()
 
     for c in caisses:
@@ -462,49 +650,9 @@ def api_export_csv():
     writer = csv.writer(out, delimiter=";")
     writer.writerow(["ID", "Statut", "Dossier", "Colis", "Client", "Chargé projet", "Type", "Dimensions", "Délai", "Caissier", "Prix achat", "Prix cession"])
     for c in caisses:
-        writer.writerow([
-            c.get("id"),
-            c.get("statut"),
-            c.get("numero_dossier"),
-            c.get("numero_colis"),
-            c.get("client"),
-            c.get("charge_projet"),
-            c.get("type_caisse"),
-            f"{c.get('longueur')} x {c.get('largeur')} x {c.get('hauteur')}",
-            c.get("delai_demande"),
-            c.get("caissier"),
-            c.get("prix_achat"),
-            c.get("prix_cession"),
-        ])
+        writer.writerow([c.get("id"), c.get("statut"), c.get("numero_dossier"), c.get("numero_colis"), c.get("client"), c.get("charge_projet"), c.get("type_caisse"), f"{c.get('longueur')} x {c.get('largeur')} x {c.get('hauteur')}", c.get("delai_demande"), c.get("caissier"), c.get("prix_achat"), c.get("prix_cession")])
     mem = io.BytesIO(out.getvalue().encode("utf-8-sig"))
     return send_file(mem, as_attachment=True, download_name="esi_caisserie.csv", mimetype="text/csv")
-
-
-@app.route("/api/demo", methods=["POST"])
-def api_demo():
-    examples = [
-        {"numero_dossier": "D-2026-001", "numero_colis": "1", "client": "Musée Exemple", "charge_projet": "Martin", "type_caisse": "PLEINE CP TYPE 16", "longueur": "120", "largeur": "80", "hauteur": "100", "delai_demande": today_iso(), "statut": "A créer", "atelier": "Secobois"},
-        {"numero_dossier": "D-2026-002", "numero_colis": "2", "client": "Galerie Test", "charge_projet": "Julie", "type_caisse": "PLEINE CP TYPE 16", "longueur": "90", "largeur": "60", "hauteur": "45", "delai_demande": today_iso(), "statut": "En cours", "caissier": "Marc", "atelier": "Arckx"},
-    ]
-    caisses = []
-    for i, e in enumerate(examples, 1):
-        e.update({
-            "id": f"CAI-{i:03d}",
-            "created_at": now_iso(),
-            "updated_at": now_iso(),
-            "reference": "",
-            "destination": "",
-            "poids_net": "",
-            "date_prevue": e.get("delai_demande"),
-            "observations": "",
-            "commentaire_atelier": "",
-            "prix_achat": "",
-            "prix_cession": "",
-        })
-        caisses.append(e)
-    replace_demo_data(caisses)
-    save_prices(DEFAULT_PRICES.copy())
-    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
