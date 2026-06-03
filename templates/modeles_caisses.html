@@ -74,7 +74,14 @@ function defaultModel(){
   renderEditor();
 }
 
-function newModel(){ defaultModel(); }
+function newModel(){
+  CURRENT_ID = null;
+  document.getElementById('modelName').value = 'NOUVEAU TYPE';
+  VARIABLES = {};
+  LINES = [];
+  renderEditor();
+  document.getElementById('modelName').focus();
+}
 
 async function loadModels(){
   MODELS = await api('/api/types-caisses');
