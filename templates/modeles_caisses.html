@@ -1,0 +1,204 @@
+{% set active='modeles' %}{% extends "base.html" %}{% block content %}
+<div class="page-title"><h1>Modèles de caisses</h1><p>Création et modification des calculs de débit matière.</p></div>
+
+<section class="panel">
+  <div class="filters">
+    <input id="modelName" placeholder="Nom du type de caisse, ex : PLEINE CP TYPE 17">
+    <button onclick="newModel()">Nouveau</button>
+    <button onclick="saveModel()" class="primary">Enregistrer le modèle</button>
+  </div>
+
+  <div class="detail-grid">
+    <div class="box">
+      <h3>Types enregistrés</h3>
+      <div id="modelsList" class="list"></div>
+    </div>
+
+    <div class="box">
+      <h3>Variables</h3>
+      <p class="small">Variables utilisables dans les formules : <b>L</b>, <b>W</b>, <b>H</b> + celles ci-dessous.</p>
+      <div id="variablesBox"></div>
+      <button onclick="addVariable()">+ Ajouter variable</button>
+    </div>
+  </div>
+
+  <h3>Lignes de débit</h3>
+  <p class="small">Exemples de formules : <b>L</b>, <b>W</b>, <b>H+C4+D4</b>, <b>L+E5+E5+C5+C5</b>. Pas besoin du signe =.</p>
+
+  <table class="table" id="linesTable">
+    <thead>
+      <tr>
+        <th>Famille</th>
+        <th>Pièce</th>
+        <th>Qté</th>
+        <th>Formule longueur</th>
+        <th>Formule largeur / haut</th>
+        <th>Épaisseur</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="linesBody"></tbody>
+  </table>
+
+  <button onclick="addLine()">+ Ajouter ligne</button>
+
+  <h3>Test rapide</h3>
+  <div class="filters">
+    <input id="testL" type="number" placeholder="Longueur L" value="120">
+    <input id="testW" type="number" placeholder="Largeur W" value="80">
+    <input id="testH" type="number" placeholder="Hauteur H" value="100">
+    <button onclick="testDebit()">Tester le débit</button>
+  </div>
+  <div id="testResult"></div>
+</section>
+
+<script>
+let MODELS = [];
+let CURRENT_ID = null;
+let VARIABLES = {};
+let LINES = [];
+
+function defaultModel(){
+  CURRENT_ID = null;
+  document.getElementById('modelName').value = '';
+  VARIABLES = {B4:10, C4:1.5, D4:4, E4:1.5, C5:1, E5:2.7, EXT_L:'L+E4+E4+E5+E5', EXT_W:'W+E4+E4+E5+E5', EXT_H:'H+E4+E4+E5+B4'};
+  LINES = [
+    {famille:'CP', piece:'PLATEAU', formule_quantite:'1', formule_longueur:'L', formule_largeur:'W', formule_epaisseur:'C4'},
+    {famille:'CP', piece:'COUVERCLE', formule_quantite:'1', formule_longueur:'L+E5+E5+C5+C5', formule_largeur:'W+E5+E5+C5+C5', formule_epaisseur:'C5'},
+    {famille:'CP', piece:'COTES', formule_quantite:'2', formule_longueur:'L+E5+E5+C5+C5', formule_largeur:'H+C4+D4', formule_epaisseur:'C5'},
+    {famille:'CP', piece:'BOUTS', formule_quantite:'2', formule_longueur:'W', formule_largeur:'H+C4+D4', formule_epaisseur:'C5'},
+    {famille:'BARRES', piece:'SEMELLES', formule_quantite:'4', formule_longueur:'W+E5+E5+C5+C5', formule_largeur:'5', formule_epaisseur:'B4'}
+  ];
+  renderEditor();
+}
+
+function newModel(){ defaultModel(); }
+
+async function api(url,opt){const r=await fetch(url,opt);return await r.json();}
+
+async function loadModels(){
+  MODELS = await api('/api/types-caisses');
+  renderModels();
+  if(!CURRENT_ID) defaultModel();
+}
+
+function renderModels(){
+  const box = document.getElementById('modelsList');
+  box.innerHTML = MODELS.map(m => `
+    <div class="card" onclick="loadModel('${m.id}')">
+      <h4>${m.nom}</h4>
+      <p>${m.actif ? 'Actif' : 'Inactif'}</p>
+    </div>
+  `).join('') || '<div class="empty">Aucun modèle enregistré</div>';
+}
+
+async function loadModel(id){
+  const m = await api('/api/types-caisses/' + id);
+  CURRENT_ID = m.id;
+  document.getElementById('modelName').value = m.nom || '';
+  VARIABLES = m.variables || {};
+  LINES = m.lignes || [];
+  renderEditor();
+}
+
+function renderEditor(){
+  renderVariables();
+  renderLines();
+}
+
+function renderVariables(){
+  const box = document.getElementById('variablesBox');
+  box.innerHTML = Object.entries(VARIABLES).map(([k,v]) => `
+    <div class="filters">
+      <input value="${k}" onchange="renameVariable('${k}', this.value)">
+      <input value="${v}" onchange="VARIABLES['${k}']=this.value">
+      <button onclick="deleteVariable('${k}')">×</button>
+    </div>
+  `).join('');
+}
+
+function renameVariable(oldKey, newKey){
+  newKey = (newKey || '').trim();
+  if(!newKey || newKey === oldKey) return;
+  VARIABLES[newKey] = VARIABLES[oldKey];
+  delete VARIABLES[oldKey];
+  renderVariables();
+}
+
+function deleteVariable(k){
+  delete VARIABLES[k];
+  renderVariables();
+}
+
+function addVariable(){
+  let name = prompt('Nom de la variable ? Ex : B4');
+  if(!name) return;
+  VARIABLES[name.trim()] = 0;
+  renderVariables();
+}
+
+function renderLines(){
+  const body = document.getElementById('linesBody');
+  body.innerHTML = LINES.map((l,i) => `
+    <tr>
+      <td><input value="${l.famille||''}" onchange="LINES[${i}].famille=this.value"></td>
+      <td><input value="${l.piece||''}" onchange="LINES[${i}].piece=this.value"></td>
+      <td><input value="${l.formule_quantite||l.quantite||'1'}" onchange="LINES[${i}].formule_quantite=this.value"></td>
+      <td><input value="${l.formule_longueur||''}" onchange="LINES[${i}].formule_longueur=this.value"></td>
+      <td><input value="${l.formule_largeur||''}" onchange="LINES[${i}].formule_largeur=this.value"></td>
+      <td><input value="${l.formule_epaisseur||''}" onchange="LINES[${i}].formule_epaisseur=this.value"></td>
+      <td><button onclick="removeLine(${i})">×</button></td>
+    </tr>
+  `).join('');
+}
+
+function addLine(){
+  LINES.push({famille:'CP', piece:'', formule_quantite:'1', formule_longueur:'L', formule_largeur:'W', formule_epaisseur:'C4'});
+  renderLines();
+}
+
+function removeLine(i){
+  LINES.splice(i,1);
+  renderLines();
+}
+
+async function saveModel(){
+  const nom = document.getElementById('modelName').value.trim();
+  if(!nom){ alert('Nom obligatoire'); return; }
+
+  const payload = {nom, variables: VARIABLES, lignes: LINES, actif: true};
+  let res;
+  if(CURRENT_ID){
+    res = await api('/api/types-caisses/' + CURRENT_ID, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  } else {
+    res = await api('/api/types-caisses', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    CURRENT_ID = res.id;
+  }
+  if(res.error){ alert(res.error); return; }
+  alert('Modèle enregistré');
+  await loadModels();
+}
+
+async function testDebit(){
+  if(!CURRENT_ID){
+    alert('Enregistre d’abord le modèle pour le tester.');
+    return;
+  }
+  const payload = {
+    longueur: document.getElementById('testL').value,
+    largeur: document.getElementById('testW').value,
+    hauteur: document.getElementById('testH').value
+  };
+  const res = await api('/api/types-caisses/' + CURRENT_ID + '/test-debit', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  document.getElementById('testResult').innerHTML = `
+    ${res.ok ? `<div class="box">Dimensions extérieures : ${res.dims_ext.longueur} × ${res.dims_ext.largeur} × ${res.dims_ext.hauteur} cm</div>` : `<div class="empty">${res.message||res.error}</div>`}
+    <table class="table">
+      <tr><th>Famille</th><th>Pièce</th><th>Qté</th><th>Longueur</th><th>Largeur</th><th>Ép.</th></tr>
+      ${(res.lignes||[]).map(l=>`<tr><td>${l.famille}</td><td>${l.piece}</td><td>${l.quantite}</td><td>${l.longueur}</td><td>${l.largeur}</td><td>${l.epaisseur}</td></tr>`).join('')}
+    </table>
+  `;
+}
+
+document.addEventListener('DOMContentLoaded', loadModels);
+</script>
+{% endblock %}
