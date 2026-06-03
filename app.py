@@ -210,8 +210,6 @@ def safe_eval_formula(expr, variables):
     def _eval(node):
         if isinstance(node, ast.Expression):
             return _eval(node.body)
-        if isinstance(node, ast.Num):
-            return float(node.n)
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return float(node.value)
         if isinstance(node, ast.Name):
