@@ -16,16 +16,16 @@
 
     <div class="box">
       <h3>Variables</h3>
-      <p class="small">Variables utilisables dans les formules : <b>L</b>, <b>W</b>, <b>H</b> + celles ci-dessous.</p>
+      <p class="small">Variables utilisables : <b>L</b>, <b>W</b>, <b>H</b> + celles ci-dessous.</p>
       <div id="variablesBox"></div>
       <button onclick="addVariable()">+ Ajouter variable</button>
     </div>
   </div>
 
   <h3>Lignes de débit</h3>
-  <p class="small">Exemples de formules : <b>L</b>, <b>W</b>, <b>H+C4+D4</b>, <b>L+E5+E5+C5+C5</b>. Pas besoin du signe =.</p>
+  <p class="small">Exemples : <b>L</b>, <b>W</b>, <b>H+C4+D4</b>, <b>L+E5+E5+C5+C5</b>.</p>
 
-  <table class="table" id="linesTable">
+  <table class="table">
     <thead>
       <tr>
         <th>Famille</th>
@@ -58,6 +58,8 @@ let CURRENT_ID = null;
 let VARIABLES = {};
 let LINES = [];
 
+async function api(url,opt){const r=await fetch(url,opt);return await r.json();}
+
 function defaultModel(){
   CURRENT_ID = null;
   document.getElementById('modelName').value = '';
@@ -73,8 +75,6 @@ function defaultModel(){
 }
 
 function newModel(){ defaultModel(); }
-
-async function api(url,opt){const r=await fetch(url,opt);return await r.json();}
 
 async function loadModels(){
   MODELS = await api('/api/types-caisses');
