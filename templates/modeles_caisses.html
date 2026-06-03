@@ -23,7 +23,7 @@
   </div>
 
   <h3>Lignes de débit</h3>
-  <p class="small">Exemples : <b>L</b>, <b>W</b>, <b>H+C4+D4</b>, <b>L+E5+E5+C5+C5</b>.</p>
+  <p class="small">Exemples : <b>Longueur intérieure</b>, <b>Largeur intérieure</b>, <b>Hauteur intérieure + Épaisseur plateau + Épaisseur chemin extérieur</b>.</p>
 
   <table class="table">
     <thead>
@@ -106,7 +106,8 @@ function renderEditor(){
   renderLines();
 }
 
-function variableLabel(k){
+function formulaToDisplay(value){
+  let txt = String(value || '');
   const labels = {
     B4:'Hauteur semelle',
     C4:'Épaisseur plateau',
@@ -114,18 +115,65 @@ function variableLabel(k){
     E4:'Épaisseur habillage',
     C5:'Épaisseur couvercle',
     E5:'Épaisseur barre',
+    L:'Longueur intérieure',
+    W:'Largeur intérieure',
+    H:'Hauteur intérieure',
     EXT_L:'Longueur extérieure',
     EXT_W:'Largeur extérieure',
     EXT_H:'Hauteur extérieure'
   };
-  return labels[k] || k;
+  Object.entries(labels)
+    .sort((a,b) => b[0].length - a[0].length)
+    .forEach(([code,label]) => {
+      txt = txt.replace(new RegExp(`\\b${code}\\b`, 'g'), label);
+    });
+  return txt;
+}
+
+function formulaToInternal(value){
+  let txt = String(value || '');
+  const codes = {
+    'Hauteur semelle':'B4',
+    'Épaisseur plateau':'C4',
+    'Epaisseur plateau':'C4',
+    'Épaisseur chemin extérieur':'D4',
+    'Epaisseur chemin extérieur':'D4',
+    'Épaisseur habillage':'E4',
+    'Epaisseur habillage':'E4',
+    'Épaisseur couvercle':'C5',
+    'Epaisseur couvercle':'C5',
+    'Épaisseur barre':'E5',
+    'Epaisseur barre':'E5',
+    'Longueur intérieure':'L',
+    'Longueur interieure':'L',
+    'Largeur intérieure':'W',
+    'Largeur interieure':'W',
+    'Hauteur intérieure':'H',
+    'Hauteur interieure':'H',
+    'Longueur extérieure':'EXT_L',
+    'Longueur exterieure':'EXT_L',
+    'Largeur extérieure':'EXT_W',
+    'Largeur exterieure':'EXT_W',
+    'Hauteur extérieure':'EXT_H',
+    'Hauteur exterieure':'EXT_H'
+  };
+  Object.entries(codes)
+    .sort((a,b) => b[0].length - a[0].length)
+    .forEach(([label,code]) => {
+      txt = txt.replaceAll(label, code);
+    });
+  return txt;
+}
+
+function updateLineFormula(index, key, value){
+  LINES[index][key] = formulaToInternal(value);
 }
 
 function renderVariables(){
   const box = document.getElementById('variablesBox');
   box.innerHTML = Object.entries(VARIABLES).map(([k,v]) => `
     <div class="filters">
-      <input value="${variableLabel(k)}" readonly>
+      <input value="${k}" onchange="renameVariable('${k}', this.value)">
       <input value="${v}" onchange="VARIABLES['${k}']=this.value">
       <button onclick="deleteVariable('${k}')">×</button>
     </div>
@@ -158,10 +206,10 @@ function renderLines(){
     <tr>
       <td><input value="${l.famille||''}" onchange="LINES[${i}].famille=this.value"></td>
       <td><input value="${l.piece||''}" onchange="LINES[${i}].piece=this.value"></td>
-      <td><input value="${l.formule_quantite||l.quantite||'1'}" onchange="LINES[${i}].formule_quantite=this.value"></td>
-      <td><input value="${l.formule_longueur||''}" onchange="LINES[${i}].formule_longueur=this.value"></td>
-      <td><input value="${l.formule_largeur||''}" onchange="LINES[${i}].formule_largeur=this.value"></td>
-      <td><input value="${l.formule_epaisseur||''}" onchange="LINES[${i}].formule_epaisseur=this.value"></td>
+      <td><input value="${formulaToDisplay(l.formule_quantite||l.quantite||'1')}" onchange="updateLineFormula(${i}, 'formule_quantite', this.value)"></td>
+      <td><input value="${formulaToDisplay(l.formule_longueur||'')}" onchange="updateLineFormula(${i}, 'formule_longueur', this.value)"></td>
+      <td><input value="${formulaToDisplay(l.formule_largeur||'')}" onchange="updateLineFormula(${i}, 'formule_largeur', this.value)"></td>
+      <td><input value="${formulaToDisplay(l.formule_epaisseur||'')}" onchange="updateLineFormula(${i}, 'formule_epaisseur', this.value)"></td>
       <td><button onclick="removeLine(${i})">×</button></td>
     </tr>
   `).join('');
