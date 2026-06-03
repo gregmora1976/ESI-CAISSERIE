@@ -106,6 +106,21 @@ function renderEditor(){
   renderLines();
 }
 
+function variableLabel(k){
+  const labels = {
+    B4:'Hauteur semelle',
+    C4:'Épaisseur plateau',
+    D4:'Épaisseur chemin extérieur',
+    E4:'Épaisseur habillage',
+    C5:'Épaisseur couvercle',
+    E5:'Épaisseur barre',
+    EXT_L:'Longueur extérieure',
+    EXT_W:'Largeur extérieure',
+    EXT_H:'Hauteur extérieure'
+  };
+  return labels[k] || k;
+}
+
 function formulaToDisplay(value){
   let txt = String(value || '');
   const labels = {
@@ -173,7 +188,7 @@ function renderVariables(){
   const box = document.getElementById('variablesBox');
   box.innerHTML = Object.entries(VARIABLES).map(([k,v]) => `
     <div class="filters">
-      <input value="${k}" onchange="renameVariable('${k}', this.value)">
+      <input value="${variableLabel(k)}" readonly>
       <input value="${v}" onchange="VARIABLES['${k}']=this.value">
       <button onclick="deleteVariable('${k}')">×</button>
     </div>
