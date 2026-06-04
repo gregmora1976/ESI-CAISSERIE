@@ -8,9 +8,8 @@
 </head>
 <body data-page="{{ active|default('') }}">
 <header class="topbar">
-  <div class="brand"><div class="logo">ESI</div><div><strong>ESI Caisserie</strong><span>Fabrication • Devis • Planning</span></div></div>
+  <a href="/emballage" class="brand"><div class="logo">ESI</div><div><strong>ESI Caisserie</strong><span>Fabrication • Devis • Planning</span></div></a>
   <nav>
-    <a class="{{ 'active' if active=='accueil' else '' }}" href="/">Accueil</a>
     <a class="{{ 'active' if active=='emballage' else '' }}" href="/emballage">Emballage</a>
     <a class="{{ 'active' if active=='devis' else '' }}" href="/devis">Devis</a>
     <a class="{{ 'active' if active=='caisserie' else '' }}" href="/caisserie">Caisserie</a>
