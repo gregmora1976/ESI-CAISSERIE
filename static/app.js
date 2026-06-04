@@ -71,10 +71,9 @@ function planningStatusColor(statut){
 
 function planningEvent(c){
   return `<div class="event ${planningStatusClass(c.statut)}" style="background:${planningStatusColor(c.statut)};color:white;">
-    <b>${c.numero_dossier || c.id}</b> - colis ${c.numero_colis || '-'}<br>
-    ${c.longueur || '-'}×${c.largeur || '-'}×${c.hauteur || '-'} / ${c.nom_scieur || c.nom_barreur || 'non affecté'}<br>
-    ${c.charge_projet || '-'}
-  </div>`;
+  <b>${c.numero_dossier || '-'} - ${c.numero_colis || '-'}</b><br>
+  ${c.client || '-'}
+</div>
 }
 
 async function initPlanning(){
