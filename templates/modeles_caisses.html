@@ -10,18 +10,9 @@
     <button onclick="saveModel()" class="primary">Enregistrer le modèle</button>
   </div>
 
-  <div class="detail-grid">
-    <div class="box">
-      <h3>Types enregistrés</h3>
-      <div id="modelsList" class="list"></div>
-    </div>
-
-    <div class="box">
-      <h3>Variables</h3>
-      <p class="small">Variables utilisables : <b>L</b>, <b>W</b>, <b>H</b> + celles ci-dessous.</p>
-      <div id="variablesBox"></div>
-      <button onclick="addVariable()">+ Ajouter variable</button>
-    </div>
+  <div class="box modeles-box">
+    <h3>Types enregistrés</h3>
+    <div id="modelsList" class="list"></div>
   </div>
 
   <h3>Lignes de débit</h3>
@@ -52,6 +43,13 @@
     <button onclick="testDebit()">Tester le débit</button>
   </div>
   <div id="testResult"></div>
+
+  <div class="box variables-bottom">
+    <h3>Variables</h3>
+    <p class="small">Variables utilisables : <b>L</b>, <b>W</b>, <b>H</b> + celles ci-dessous.</p>
+    <div id="variablesBox"></div>
+    <button onclick="addVariable()">+ Ajouter variable</button>
+  </div>
 </section>
 
 <script>
