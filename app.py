@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, send_file
+from flask import Flask, render_template, jsonify, request, send_file, redirect
 from pathlib import Path
 from datetime import datetime, date
 import json, io, csv, os, urllib.request, urllib.parse, urllib.error, re, ast, operator
@@ -379,7 +379,7 @@ def quote(caisse, prices=None):
 
 @app.route("/")
 def accueil():
-    return render_template("accueil.html")
+    return redirect("/emballage")
 
 
 @app.route("/emballage")
