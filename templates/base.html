@@ -8,7 +8,7 @@
 </head>
 <body data-page="{{ active|default('') }}">
 <header class="topbar">
-  <a href="/emballage" class="brand"><div class="logo">ESI</div><div><strong>ESI Caisserie</strong><span>Fabrication • Devis • Planning</span></div></a>
+  <a href="/emballage" class="brand"><img src="{{ url_for('static', filename='logo_esi.png') }}" class="logo-img" alt="ESI"><div><strong>ESI Caisserie</strong><span>Fabrication • Devis • Planning</span></div></a>
   <nav>
     <a class="{{ 'active' if active=='emballage' else '' }}" href="/emballage">Emballage</a>
     <a class="{{ 'active' if active=='devis' else '' }}" href="/devis">Devis</a>
