@@ -27,7 +27,7 @@ CAISSE_FIELDS = [
     "id", "statut", "numero_dossier", "numero_colis", "client", "reference",
     "destination", "charge_projet", "type_caisse", "longueur", "largeur",
     "hauteur", "poids_net", "delai_demande", "date_prevue", "nature_marchandises", "observations",
-    "caissier", "atelier", "commentaire_atelier", "prix_achat",
+    "caissier", "atelier", "nom_scieur", "temps_scieur", "nom_barreur", "temps_barreur", "commentaire_atelier", "prix_achat",
     "prix_cession", "created_at", "updated_at"
 ]
 
@@ -440,6 +440,10 @@ def api_create_caisse():
         "observations": payload.get("observations", ""),
         "caissier": payload.get("caissier", ""),
         "atelier": payload.get("atelier", "Secobois"),
+        "nom_scieur": payload.get("nom_scieur", ""),
+        "temps_scieur": payload.get("temps_scieur", ""),
+        "nom_barreur": payload.get("nom_barreur", ""),
+        "temps_barreur": payload.get("temps_barreur", ""),
         "commentaire_atelier": payload.get("commentaire_atelier", ""),
         "prix_achat": payload.get("prix_achat", ""),
         "prix_cession": payload.get("prix_cession", ""),
