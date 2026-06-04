@@ -71,9 +71,9 @@ function planningStatusColor(statut){
 
 function planningEvent(c){
   return `<div class="event ${planningStatusClass(c.statut)}" style="background:${planningStatusColor(c.statut)};color:white;">
-  <b>${c.numero_dossier || '-'} - ${c.numero_colis || '-'}</b><br>
-  ${c.client || '-'}
-</div>
+    <b>${c.numero_dossier || '-'} - ${c.numero_colis || '-'}</b><br>
+    ${c.client || '-'}
+  </div>`;
 }
 
 async function initPlanning(){
