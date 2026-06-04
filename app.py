@@ -26,7 +26,7 @@ DEFAULT_PRICES = {
 CAISSE_FIELDS = [
     "id", "statut", "numero_dossier", "numero_colis", "client", "reference",
     "destination", "charge_projet", "type_caisse", "longueur", "largeur",
-    "hauteur", "poids_net", "delai_demande", "date_prevue", "observations",
+    "hauteur", "poids_net", "delai_demande", "date_prevue", "nature_marchandises", "observations",
     "caissier", "atelier", "commentaire_atelier", "prix_achat",
     "prix_cession", "created_at", "updated_at"
 ]
@@ -436,6 +436,7 @@ def api_create_caisse():
         "poids_net": payload.get("poids_net", ""),
         "delai_demande": payload.get("delai_demande", ""),
         "date_prevue": payload.get("date_prevue", payload.get("delai_demande", "")),
+        "nature_marchandises": payload.get("nature_marchandises", ""),
         "observations": payload.get("observations", ""),
         "caissier": payload.get("caissier", ""),
         "atelier": payload.get("atelier", "Secobois"),
