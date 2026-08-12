@@ -100,9 +100,38 @@ def supabase_rest_request(method, table, query="", payload=None, prefer=None):
 
 def clean_caisse_row(caisse):
     row = {}
+
+    numeric_fields = {
+        "longueur",
+        "largeur",
+        "hauteur",
+        "poids_net",
+        "temps_scieur",
+        "temps_barreur",
+        "prix_achat",
+        "prix_cession",
+    }
+
     for key in CAISSE_FIELDS:
-        if key in caisse:
-            row[key] = _as_text(caisse.get(key))
+        if key not in caisse:
+            continue
+
+        value = caisse.get(key)
+
+        # Valeurs vides => NULL dans PostgreSQL / Supabase
+        if value is None or (isinstance(value, str) and not value.strip()):
+            row[key] = None
+            continue
+
+        # Conversion explicite des colonnes numériques
+        if key in numeric_fields:
+            try:
+                row[key] = float(str(value).replace(",", "."))
+            except (ValueError, TypeError):
+                row[key] = None
+        else:
+            row[key] = value
+
     return row
 
 
@@ -175,9 +204,21 @@ def insert_caisse(caisse):
 
 def update_caisse(caisse_id, updates):
     safe_id = urllib.parse.quote(caisse_id, safe="")
-    updates = {k: _as_text(v) for k, v in updates.items() if k in CAISSE_FIELDS and k not in ["id", "created_at"]}
-    updates["updated_at"] = now_iso()
-    result = supabase_rest_request("PATCH", "caisses", f"id=eq.{safe_id}", updates, prefer="return=representation") or []
+
+    filtered = {
+        k: v for k, v in updates.items()
+        if k in CAISSE_FIELDS and k not in ["id", "created_at"]
+    }
+    cleaned = clean_caisse_row(filtered)
+    cleaned["updated_at"] = now_iso()
+
+    result = supabase_rest_request(
+        "PATCH",
+        "caisses",
+        f"id=eq.{safe_id}",
+        cleaned,
+        prefer="return=representation",
+    ) or []
     return normalize_caisse(result[0]) if result else find_caisse(caisse_id)
 
 
@@ -422,31 +463,31 @@ def api_create_caisse():
     payload = request.get_json(silent=True) or request.form.to_dict()
     caisse = {
         "id": next_id("CAI"),
-        "statut": "A créer",
-        "numero_dossier": payload.get("numero_dossier", ""),
-        "numero_colis": payload.get("numero_colis", ""),
-        "client": payload.get("client", ""),
-        "reference": payload.get("reference", ""),
-        "destination": payload.get("destination", ""),
-        "charge_projet": payload.get("charge_projet", ""),
-        "type_caisse": payload.get("type_caisse", "PLEINE CP TYPE 16"),
-        "longueur": payload.get("longueur", ""),
-        "largeur": payload.get("largeur", ""),
-        "hauteur": payload.get("hauteur", ""),
-        "poids_net": payload.get("poids_net", ""),
-        "delai_demande": payload.get("delai_demande", ""),
-        "date_prevue": payload.get("date_prevue", payload.get("delai_demande", "")),
-        "nature_marchandises": payload.get("nature_marchandises", ""),
-        "observations": payload.get("observations", ""),
-        "caissier": payload.get("caissier", ""),
-        "atelier": payload.get("atelier", "Secobois"),
-        "nom_scieur": payload.get("nom_scieur", ""),
-        "temps_scieur": payload.get("temps_scieur", ""),
-        "nom_barreur": payload.get("nom_barreur", ""),
-        "temps_barreur": payload.get("temps_barreur", ""),
-        "commentaire_atelier": payload.get("commentaire_atelier", ""),
-        "prix_achat": payload.get("prix_achat", ""),
-        "prix_cession": payload.get("prix_cession", ""),
+        "statut": payload.get("statut") or "A créer",
+        "numero_dossier": payload.get("numero_dossier") or None,
+        "numero_colis": payload.get("numero_colis") or None,
+        "client": payload.get("client") or None,
+        "reference": payload.get("reference") or None,
+        "destination": payload.get("destination") or None,
+        "charge_projet": payload.get("charge_projet") or None,
+        "type_caisse": payload.get("type_caisse") or "PLEINE CP TYPE 16",
+        "longueur": payload.get("longueur") or None,
+        "largeur": payload.get("largeur") or None,
+        "hauteur": payload.get("hauteur") or None,
+        "poids_net": payload.get("poids_net") or None,
+        "delai_demande": payload.get("delai_demande") or None,
+        "date_prevue": payload.get("date_prevue") or payload.get("delai_demande") or None,
+        "nature_marchandises": payload.get("nature_marchandises") or None,
+        "observations": payload.get("observations") or None,
+        "caissier": payload.get("caissier") or None,
+        "atelier": payload.get("atelier") or "Secobois",
+        "nom_scieur": payload.get("nom_scieur") or None,
+        "temps_scieur": payload.get("temps_scieur") or None,
+        "nom_barreur": payload.get("nom_barreur") or None,
+        "temps_barreur": payload.get("temps_barreur") or None,
+        "commentaire_atelier": payload.get("commentaire_atelier") or None,
+        "prix_achat": payload.get("prix_achat") or None,
+        "prix_cession": payload.get("prix_cession") or None,
         "created_at": now_iso(),
         "updated_at": now_iso(),
     }
