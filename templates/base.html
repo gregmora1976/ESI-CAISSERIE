@@ -5,6 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ESI Caisserie</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<style>
+  /* Champs en bleu - palette ESI */
+  input:not([type="hidden"]),
+  select,
+  textarea {
+    border: 1px solid #bae6fd !important;
+    background: #e0f2fe !important;
+    color: #1e293b !important;
+    transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+  }
+
+  input:not([type="hidden"]):hover,
+  select:hover,
+  textarea:hover {
+    border-color: #7dd3fc !important;
+    background: #d7effc !important;
+  }
+
+  input:not([type="hidden"]):focus,
+  select:focus,
+  textarea:focus {
+    outline: none !important;
+    border-color: #0ea5e9 !important;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, .18) !important;
+    background: #e0f2fe !important;
+  }
+</style>
+
 </head>
 <body data-page="{{ active|default('') }}">
 <header class="topbar">
